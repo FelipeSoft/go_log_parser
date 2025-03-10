@@ -1,0 +1,23 @@
+- Should insert each line of the log in Elastic Search
+- Should storage each line of the log independent of formats
+- Should treat the log synchronous
+- Should treat the log concurrently
+- Log familiarities: timestamp
+- Identify first the JSON lines
+
+Log 1
+2025-03-09 13:54:17 [INFO] [auth-service] User 12616 logged in from IP 192.168.76.159
+
+Log 2
+ERROR 2025-03-09 20:14:17 api-gateway Internal Server Error on /api/v1/healthcheck
+
+Log 3 (the last keys "transaction_id" and "amount" can be different like "user_id")
+{"timestamp": "2025-03-09T09:27:30.658362Z", "level": "INFO", "service": "payment-service", "message": "Transaction processed", "transaction_id": "TXN38447", "amount": 33.65}
+{"timestamp": "2025-03-09T15:41:59.659158Z", "level": "ERROR", "service": "auth-service", "message": "Invalid JWT token", "user_id": 10933}
+
+Log 4
+192.168.156.97 - - [09/Mar/2025:20:43:37 +0000] "GET /api/v1/reports HTTP/1.1" 200 2048 "-" "Mozilla/5.0 (Linux; Android 11)"
+
+Log 5
+2025-03-09 11:40:45 WARN storage-service Backup storage at 95% capacity
+
