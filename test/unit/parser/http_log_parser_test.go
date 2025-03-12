@@ -15,16 +15,14 @@ func Test_HttpLogParser(t *testing.T) {
 	}
 
 	httpLogParser := parser.NewHttpLogParser(regexp.MustCompile(`^(\S+) - - \[(.+?)\] "(\w+) (.+?) HTTP\/\d\.\d" (\d+) \d+.*?"(.*?)"$`))
-	lineCount := 1
 
-	for _, tc := range testCases {
-		output, err := httpLogParser.Parse(tc, lineCount)
+	for idx, tc := range testCases {
+		output, err := httpLogParser.Parse(tc, idx + 1)
 		if err != nil {
 			t.Fatal(err.Error())
 		}
 		if output == nil {
 			t.Fatal("output can not to be nil")
 		}
-		lineCount++
 	}
 }

@@ -20,15 +20,19 @@ func NewHttpLogParser(regex *regexp.Regexp) *HttpLogParser {
 func (p *HttpLogParser) Parse(line string, lineCount int) (*entity.LogEntry, error) {
 	matches := p.regex.FindStringSubmatch(line)
 	if matches == nil {
-		return nil, fmt.Errorf("using the HttpLogParser does not match with the format provided on the line %d of the log.", lineCount)
+		return nil, fmt.Errorf("using the HttpLogParser does not match with the format provided on the line %d of the log", lineCount)
 	}
 
-	timestamp, err := time.Parse(time.RFC3339Nano, matches[2])
+	timestamp, err := time.Parse("02/Jan/2006:15:04:05 -0700", matches[2])
 	if err != nil {
-		return nil, fmt.Errorf("using the HttpLogParser an error occurred on the line %d of the log in the parsing time moment.", lineCount)
+		return nil, fmt.Errorf("using the HttpLogParser an error occurred on the line %d of the log in the parsing time moment", lineCount)
 	}
 
 	integer, err := strconv.Atoi(matches[5])
+
+	if err != nil {
+		return nil, err
+	}
 
 	entry := &entity.LogEntry{
 		Timestamp:  timestamp,

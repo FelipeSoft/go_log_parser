@@ -13,11 +13,11 @@ import (
 func main() {
 	// workers := 5
 
-	reDefaultStructured := regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(\w+)\] \[(.+?)\] (.+)$`)
-	reJson := regexp.MustCompile(`\{(.*?)\}`)
-	reSimpleAlert := regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) (\w+) (\S+) (.+)$`)
-	reHttp := regexp.MustCompile(`^(\S+) - - \[(.+?)\] "(\w+) (.+?) HTTP\/\d\.\d" (\d+) \d+.*?"(.*?)"$`)
-	reBracketsStructured := regexp.MustCompile(`^(\w+) (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) (\S+) (.+)$`)
+	reDefaultStructured := regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(\w+)\] \[([\w-]+)\] (.+)$`)
+	reJson := regexp.MustCompile(`^\{.*\}$`)
+	reSimpleAlert := regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) (\w+) ([\w-]+) (.+)$`)
+	reHttp := regexp.MustCompile(`^(\S+) - - \[(.+?)\] "(\w+) (.+?) HTTP\/\d\.\d" (\d+) (\d+|-) ".*?" "(.*?)"$`)
+	reBracketsStructured := regexp.MustCompile(`^(\w+) (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) ([\w-]+) (.+)$`)
 
 	logFormatFactory := internal.NewLogParserFactory(map[*regexp.Regexp]entity.LogParser{
 		reDefaultStructured:  parser.NewDefaultStructuredParser(reDefaultStructured),
