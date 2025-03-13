@@ -1,0 +1,24 @@
+ERROR 2025-03-09 11:50:41 api-gateway Internal Server Error on /api/v1/healthcheck
+{"timestamp": "2025-03-09T11:33:55.658957Z", "level": "ERROR", "service": "auth-service", "message": "Invalid JWT token", "user_id": 16627}
+2025-03-09 13:12:57 WARN storage-service Backup storage at 89% capacity
+ERROR 2025-03-09 07:12:36 api-gateway Internal Server Error on /api/v1/healthcheck
+{"timestamp": "2025-03-09T17:08:52.659038Z", "level": "INFO", "service": "payment-service", "message": "Transaction processed", "transaction_id": "TXN54053", "amount": 359.5}
+2025-03-09 23:42:36 WARN storage-service Backup storage at 93% capacity
+192.168.163.50 - - [09/Mar/2025:16:13:43 +0000] "POST /api/v1/register HTTP/1.1" 201 512 "-" "Mozilla/5.0 (Windows NT 10.0; Win64)"
+192.168.142.67 - - [09/Mar/2025:23:51:22 +0000] "GET /api/v1/reports HTTP/1.1" 200 2048 "-" "Mozilla/5.0 (Linux; Android 11)"
+{"timestamp": "2025-03-09T15:17:04.659136Z", "level": "ERROR", "service": "auth-service", "message": "Invalid JWT token", "user_id": 18431}
+{"timestamp": "2025-03-09T15:41:59.659158Z", "level": "ERROR", "service": "auth-service", "message": "Invalid JWT token", "user_id": 10933}
+ERROR 2025-03-09 01:36:21 api-gateway Internal Server Error on /api/v1/healthcheck
+2025-03-09 11:40:45 WARN storage-service Backup storage at 95% capacity
+{"timestamp": "2025-03-09T06:38:49.659222Z", "level": "INFO", "service": "payment-service", "message": "Transaction processed", "transaction_id": "TXN13601", "amount": 44.09}
+2025-03-09 04:03:37 [ERROR] [db-connection] Deadlock detected on table "users"
+2025-03-09 06:26:58 WARN storage-service Backup storage at 87% capacity
+2025-03-09 19:01:29 [ERROR] [db-connection] Deadlock detected on table "payments"
+192.168.18.224 - - [09/Mar/2025:13:54:53 +0000] "GET /api/v1/reports HTTP/1.1" 200 2048 "-" "Mozilla/5.0 (Linux; Android 11)"
+192.168.174.52 - - [09/Mar/2025:23:32:23 +0000] "POST /api/v1/register HTTP/1.1" 201 512 "-" "Mozilla/5.0 (Windows NT 10.0; Win64)"
+192.168.66.197 - - [09/Mar/2025:10:38:34 +0000] "GET /api/v1/reports HTTP/1.1" 200 2048 "-" "Mozilla/5.0 (Linux; Android 11)"
+192.168.115.156 - - [09/Mar/2025:19:00:19 +0000] "POST /api/v1/register HTTP/1.1" 201 512 "-" "Mozilla/5.0 (Windows NT 10.0; Win64)"
+2025-03-09 03:11:55 [INFO] [auth-service] User 17317 logged in from IP 192.168.223.186
+2025-03-09 15:11:59 WARN storage-service Backup storage at 92% capacity
+2025-03-09 08:57:14 WARN storage-service Backup storage at 97% capacity
+2025-03-09 07:01:29 [ERROR] [db-connection] Deadlock detected on table "orders"
