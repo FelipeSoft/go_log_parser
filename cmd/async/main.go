@@ -23,7 +23,8 @@ func main() {
 	reJson := regexp.MustCompile(`^\{.*\}$`)
 	reSimpleAlert := regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) (\w+) ([\w-]+) (.+)$`)
 	reHttp := regexp.MustCompile(`^(\S+) - - \[(.+?)\] "(\w+) (.+?) HTTP\/\d\.\d" (\d+) (\d+|-) ".*?" "(.*?)"$`)
-	reBracketsStructured := regexp.MustCompile(`^(\w+) (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) ([\w-]+) (.+)$`)
+	reBracketsStructured := regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(\w+)\] \[([\w-]+)\] (.+)$`)
+	reLevelFirst := regexp.MustCompile(`^(\w+) (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) ([\w-]+) (.+)$`)
 
 	logFormatFactory := internal.NewLogParserFactory(map[*regexp.Regexp]entity.LogParser{
 		reDefaultStructured:  parser.NewDefaultStructuredParser(reDefaultStructured),
@@ -31,6 +32,7 @@ func main() {
 		reSimpleAlert:        parser.NewSimpleAlertParser(reSimpleAlert),
 		reHttp:               parser.NewHttpLogParser(reHttp),
 		reBracketsStructured: parser.NewBracketsStructuredParser(reBracketsStructured),
+		reLevelFirst:         parser.NewLevelFirstParser(reLevelFirst),
 	})
 	logParser := internal.NewLogParser(logFormatFactory)
 
