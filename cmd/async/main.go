@@ -1,51 +1,81 @@
 package main
 
 import (
-	"fmt"
 	"log"
-	"regexp"
+	"os"
+	"runtime"
+	"sync"
+	"time"
 
 	"github.com/etl_app_transform_service/internal"
-	"github.com/etl_app_transform_service/internal/entity"
-	"github.com/etl_app_transform_service/internal/parser"
 	"github.com/joho/godotenv"
 )
 
 func main() {
-	// workers := 5
+	start := time.Now()
 
 	err := godotenv.Load("./../../.env")
 	if err != nil {
-		log.Fatal("could not load the enviroment variables file")
+		log.Fatal("could not load the environment variables file")
 	}
 
-	reDefaultStructured := regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(\w+)\] \[([\w-]+)\] (.+)$`)
-	reJson := regexp.MustCompile(`^\{.*\}$`)
-	reSimpleAlert := regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) (\w+) ([\w-]+) (.+)$`)
-	reHttp := regexp.MustCompile(`^(\S+) - - \[(.+?)\] "(\w+) (.+?) HTTP\/\d\.\d" (\d+) (\d+|-) ".*?" "(.*?)"$`)
-	reBracketsStructured := regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(\w+)\] \[([\w-]+)\] (.+)$`)
-	reLevelFirst := regexp.MustCompile(`^(\w+) (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) ([\w-]+) (.+)$`)
+	var numWorkers int = runtime.NumCPU()
+	var workersOffset []internal.Chunk
+	var currentStart int64 = 0
+	var wg sync.WaitGroup
+	ch := make(chan string)
 
-	logFormatFactory := internal.NewLogParserFactory(map[*regexp.Regexp]entity.LogParser{
-		reDefaultStructured:  parser.NewDefaultStructuredParser(reDefaultStructured),
-		reJson:               parser.NewJsonLogParser(reJson),
-		reSimpleAlert:        parser.NewSimpleAlertParser(reSimpleAlert),
-		reHttp:               parser.NewHttpLogParser(reHttp),
-		reBracketsStructured: parser.NewBracketsStructuredParser(reBracketsStructured),
-		reLevelFirst:         parser.NewLevelFirstParser(reLevelFirst),
-	})
-	logParser := internal.NewLogParser(logFormatFactory)
-
-	output, err := logParser.ParseLocalLogFile("C:/Users/felip/Filipinho/etl_app/transform_service/assets/server_log.txt")
+	filepath := os.Getenv("LOG_SERVER_LOCAL_PATH")
+	file, err := os.Open(filepath)
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Fatalf("error during reading log file: %s", err.Error())
+	}
+	defer file.Close()
+
+	fileInfo, err := file.Stat()
+	if err != nil {
+		log.Fatalf("error during get log file stat: %s", err.Error())
 	}
 
-	fmt.Println(output)
+	fileSize := fileInfo.Size()
+	bytesForWorkers := fileSize / int64(numWorkers)
 
-	// for w := range workers {
-	// 	go func(worker int) {
+	for idx := range numWorkers {
+		finalBits := currentStart + bytesForWorkers
+		if idx == numWorkers-1 {
+			finalBits = fileSize
+		}
 
-	// 	}(w)
-	// }
+		workersOffset = append(workersOffset, internal.Chunk{
+			StartBits: currentStart,
+			FinalBits: finalBits,
+		})
+
+		currentStart = finalBits + 1
+	}
+
+	for idx, offset := range workersOffset {
+		wg.Add(1)
+		go func(worker int) {
+			chunkProcessor := internal.NewChunkProcessor(idx, filepath, offset.StartBits, offset.FinalBits, &wg, ch)
+			n, err := chunkProcessor.ProcessChunk()
+			if err != nil {
+				log.Print(err)
+			}
+			log.Print(n)
+		}(idx)
+	}
+
+	go func() {
+		wg.Wait()
+		close(ch)
+	}()
+
+	for chunk := range ch {
+		log.Print(chunk)
+	}
+
+	end := time.Now()
+	finishedAt := end.Sub(start)
+	log.Printf("Program finished in %f seconds", finishedAt.Seconds())
 }

@@ -4,6 +4,7 @@
 - Should treat the log concurrently
 - Log familiarities: timestamp
 - Identify first the JSON lines
+- Implement Shard Offset for the async method of log file processing
 
 Log 1
 2025-03-09 13:54:17 [INFO] [auth-service] User 12616 logged in from IP 192.168.76.159
