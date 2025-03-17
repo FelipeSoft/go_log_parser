@@ -3,6 +3,7 @@ package application
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 
 	"github.com/etl_app_transform_service/internal/domain/entity"
 )
@@ -15,16 +16,39 @@ type LogProcessor struct {
 	transformRepository entity.TransformRepository
 }
 
-func NewLogProcessor(batchLinesSize int, consumer entity.MessageConsumer, producer entity.MessageProducer, logParserFactory *LogParserFactory, transformRepository entity.TransformRepository) *LogProcessor {	return &LogProcessor{
+func NewLogProcessor(batchLinesSize int, consumer entity.MessageConsumer, producer entity.MessageProducer, logParserFactory *LogParserFactory, transformRepository entity.TransformRepository) *LogProcessor {
+	return &LogProcessor{
 		batchLinesSize:      batchLinesSize,
-		consumer:           consumer,
-		producer:           producer,
+		consumer:            consumer,
+		producer:            producer,
 		logParserFactory:    logParserFactory,
 		transformRepository: transformRepository,
 	}
 }
 
 func (lp *LogProcessor) ProcessLogs() error {
+	for msg := range lp.consumer.Messages() {
+		parser, err := lp.logParserFactory.GetParser(msg)
+		if err != nil {
+			return fmt.Errorf("error parsing line %s: %v", msg, err)
+		}
+		logEntry, err := parser.Parse(msg)
+		if err != nil {
+			return fmt.Errorf("error parsing line %s: %v", msg, err)
+		}
+		data, err := json.Marshal(logEntry)
+		if err != nil {
+			return err
+		}
+		if err := lp.producer.Send(string(data)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// review
+func (lp *LogProcessor) ProcessBatchLogs() error {
 	var batch []entity.LogEntry
 
 	for msg := range lp.consumer.Messages() {
@@ -38,6 +62,7 @@ func (lp *LogProcessor) ProcessLogs() error {
 		}
 		batch = append(batch, logEntry)
 		if len(batch) >= lp.batchLinesSize {
+			log.Printf("\nLog Processor Message: %s", msg)
 			data, err := json.Marshal(batch)
 			if err != nil {
 				return err
