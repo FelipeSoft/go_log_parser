@@ -1,10 +1,11 @@
 package parser_test
 
 import (
+	"log"
 	"regexp"
 	"testing"
 
-	"github.com/etl_app_transform_service/internal/parser"
+	"github.com/etl_app_transform_service/internal/application/parser"
 )
 
 func Test_JsonLogParser(t *testing.T) {
@@ -15,13 +16,11 @@ func Test_JsonLogParser(t *testing.T) {
 	}
 
 	jsonLogParser := parser.NewJsonLogParser(regexp.MustCompile(`^\{.*\}$`))
-	for idx, tc := range testCases {
-		output, err := jsonLogParser.Parse(tc, idx + 1)
+	for _, tc := range testCases {
+		output, err := jsonLogParser.Parse(tc)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if output == nil {
-			t.Fatal("output can not be nil")
-		}
+		log.Print(output)
 	}
 }

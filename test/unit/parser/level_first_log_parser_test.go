@@ -1,10 +1,11 @@
 package parser_test
 
 import (
+	"log"
 	"regexp"
 	"testing"
 
-	"github.com/etl_app_transform_service/internal/parser"
+	"github.com/etl_app_transform_service/internal/application/parser"
 )
 
 func Test_LevelFirstLogParser(t *testing.T) {
@@ -15,13 +16,11 @@ func Test_LevelFirstLogParser(t *testing.T) {
 	}
 
 	levelFirstParser := parser.NewLevelFirstParser(regexp.MustCompile(`^(\w+) (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) ([\w-]+) (.+)$`))
-	for idx, tc := range testCases {
-		output, err := levelFirstParser.Parse(tc, idx + 1)
+	for _, tc := range testCases {
+		output, err := levelFirstParser.Parse(tc)
 		if err != nil {
 			t.Fatal(err.Error())
 		}
-		if output == nil {
-			t.Fatal("output can not to be nil")
-		}
+		log.Print(output)
 	}
 }

@@ -1,10 +1,11 @@
 package parser_test
 
 import (
+	"log"
 	"regexp"
 	"testing"
 
-	"github.com/etl_app_transform_service/internal/parser"
+	"github.com/etl_app_transform_service/internal/application/parser"
 )
 
 func Test_StructuredLogParser(t *testing.T) {
@@ -15,13 +16,11 @@ func Test_StructuredLogParser(t *testing.T) {
 	}
 
 	structuredLogParser := parser.NewDefaultStructuredParser(regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(\w+)\] \[([\w-]+)\] (.+)$`))
-	for idx, tc := range testCases {
-		output, err := structuredLogParser.Parse(tc, idx + 1)
+	for _, tc := range testCases {
+		output, err := structuredLogParser.Parse(tc)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if output == nil {
-			t.Fatal("output can not be nil")
-		}
+		log.Print(output)
 	}
 }

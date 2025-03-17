@@ -1,4 +1,3 @@
-- Should insert each line of the log in Elastic Search
 - Should storage each line of the log independent of formats
 - Should treat the log synchronous
 - Should treat the log concurrently

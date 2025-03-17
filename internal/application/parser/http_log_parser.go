@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/etl_app_transform_service/internal/entity"
+	"github.com/etl_app_transform_service/internal/domain/entity"
 )
 
 type HttpLogParser struct {
@@ -17,24 +17,24 @@ func NewHttpLogParser(regex *regexp.Regexp) *HttpLogParser {
 	return &HttpLogParser{regex: regex}
 }
 
-func (p *HttpLogParser) Parse(line string, lineCount int) (*entity.LogEntry, error) {
+func (p *HttpLogParser) Parse(line string) (entity.LogEntry, error) {
 	matches := p.regex.FindStringSubmatch(line)
 	if matches == nil {
-		return nil, fmt.Errorf("using the HttpLogParser does not match with the format provided on the line %d of the log", lineCount)
+		return entity.LogEntry{}, fmt.Errorf("using the HttpLogParser does not match with the format provided on the line %s of the log", line)
 	}
 
 	timestamp, err := time.Parse("02/Jan/2006:15:04:05 -0700", matches[2])
 	if err != nil {
-		return nil, fmt.Errorf("using the HttpLogParser an error occurred on the line %d of the log in the parsing time moment", lineCount)
+		return entity.LogEntry{}, fmt.Errorf("using the HttpLogParser an error occurred on the line %s of the log in the parsing time moment", line)
 	}
 
 	integer, err := strconv.Atoi(matches[5])
 
 	if err != nil {
-		return nil, err
+		return entity.LogEntry{}, err
 	}
 
-	entry := &entity.LogEntry{
+	entry := entity.LogEntry{
 		Timestamp:  timestamp,
 		Level:      "INFO",
 		Service:    matches[3],

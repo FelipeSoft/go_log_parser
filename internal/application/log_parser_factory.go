@@ -1,9 +1,10 @@
-package internal
+package application
 
 import (
+	"fmt"
 	"regexp"
 
-	"github.com/etl_app_transform_service/internal/entity"
+	"github.com/etl_app_transform_service/internal/domain/entity"
 )
 
 type LogParserFactory struct {
@@ -16,11 +17,11 @@ func NewLogParserFactory(parsers map[*regexp.Regexp]entity.LogParser) *LogParser
 	}
 }
 
-func (f *LogParserFactory) GetParser(line string) entity.LogParser {
+func (f *LogParserFactory) GetParser(line string) (entity.LogParser, error) {
 	for regex, parser := range f.parsers {
 		if regex.MatchString(line) {
-			return parser
+			return parser, nil
 		}
 	}
-	return nil
+	return nil, fmt.Errorf("could not find a parser for line %s", line)
 }

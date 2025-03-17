@@ -1,4 +1,4 @@
-package internal
+package application
 
 import (
 	"bufio"
@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"sync"
+
+	"github.com/etl_app_transform_service/internal/domain/entity"
 )
 
 type Chunk struct {
@@ -14,23 +16,43 @@ type Chunk struct {
 }
 
 type ChunkProcessor struct {
-	workerID    int
 	offsetStart int64
 	offsetEnd   int64
 	wg          *sync.WaitGroup
 	filepath    string
-	ch          chan string
+	producer    entity.MessageProducer // using interface
 }
 
-func NewChunkProcessor(workerId int, filepath string, offsetStart, offsetEnd int64, wg *sync.WaitGroup, ch chan string) *ChunkProcessor {
+func NewChunkProcessor(filepath string, offsetStart, offsetEnd int64, wg *sync.WaitGroup, producer entity.MessageProducer) *ChunkProcessor {
 	return &ChunkProcessor{
-		workerID:    workerId,
 		offsetStart: offsetStart,
 		offsetEnd:   offsetEnd,
 		wg:          wg,
 		filepath:    filepath,
-		ch:          ch,
+		producer:    producer,
 	}
+}
+
+func DefineChunkWorkers(workers int64, filesize int64) []Chunk {
+	var currentStart int64 = 0
+	var chunks []Chunk
+	bytesForWorkers := filesize / int64(workers)
+
+	for idx := range workers {
+		finalBits := currentStart + bytesForWorkers
+		if idx == workers-1 {
+			finalBits = filesize
+		}
+
+		chunks = append(chunks, Chunk{
+			StartBits: currentStart,
+			FinalBits: finalBits,
+		})
+
+		currentStart = finalBits + 1
+	}
+
+	return chunks
 }
 
 func (c *ChunkProcessor) ProcessChunk() (*int, error) {
@@ -61,13 +83,9 @@ func (c *ChunkProcessor) ProcessChunk() (*int, error) {
 
 	for scanner.Scan() {
 		line := scanner.Text()
-		bytesRead += int64(len(line)) + 1
-
-		if bytesRead > c.offsetEnd {
-			break
+		if err := c.producer.Send(line); err != nil {
+			return nil, err
 		}
-
-		c.ch <- line
 	}
 
 	if err := scanner.Err(); err != nil {

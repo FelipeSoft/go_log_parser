@@ -1,10 +1,11 @@
 package parser_test
 
 import (
+	"log"
 	"regexp"
 	"testing"
 
-	"github.com/etl_app_transform_service/internal/parser"
+	"github.com/etl_app_transform_service/internal/application/parser"
 )
 
 func Test_HttpLogParser(t *testing.T) {
@@ -16,13 +17,11 @@ func Test_HttpLogParser(t *testing.T) {
 
 	httpLogParser := parser.NewHttpLogParser(regexp.MustCompile(`^(\S+) - - \[(.+?)\] "(\w+) (.+?) HTTP\/\d\.\d" (\d+) \d+.*?"(.*?)"$`))
 
-	for idx, tc := range testCases {
-		output, err := httpLogParser.Parse(tc, idx + 1)
+	for _, tc := range testCases {
+		output, err := httpLogParser.Parse(tc)
 		if err != nil {
 			t.Fatal(err.Error())
 		}
-		if output == nil {
-			t.Fatal("output can not to be nil")
-		}
+		log.Print(output)
 	}
 }
