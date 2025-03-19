@@ -21,8 +21,8 @@ import (
 )
 
 func main() {
-	var chunkWorkers int = 5
-	var logProcessorWorkers int = 5
+	var chunkWorkers int = 20
+	var logProcessorWorkers int = 20
 	var wg sync.WaitGroup
 	var batchLimitTimeout time.Duration = 1 * time.Second
 
