@@ -16,6 +16,10 @@ func NewDefaultStructuredParser(regex *regexp.Regexp) *DefaultStructuredParser {
 	return &DefaultStructuredParser{regex: regex}
 }
 
+func (p *DefaultStructuredParser) PreservesRaw() bool {
+    return false
+}
+
 func (p *DefaultStructuredParser) Parse(line string) (entity.LogEntry, error) {
 	matches := p.regex.FindStringSubmatch(line)
 	if matches == nil {

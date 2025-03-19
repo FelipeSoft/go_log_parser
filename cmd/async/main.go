@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
+	"os/signal"
 	"regexp"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/etl_app_transform_service/internal/application"
@@ -21,8 +24,20 @@ func main() {
 	var chunkWorkers int = 5
 	var logProcessorWorkers int = 5
 	var wg sync.WaitGroup
+	var batchLimitTimeout time.Duration = 1 * time.Second
 
-	start := time.Now()
+	ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+
+	sigChan := make(chan os.Signal, 1)
+    signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+    go func() {
+        <-sigChan
+        cancel()  // Cancela o contexto para iniciar o shutdown
+        log.Println("Shutting down gracefully...")
+    }()
+
 
 	err := godotenv.Load("./../../.env")
 	if err != nil {
@@ -96,48 +111,45 @@ func main() {
 		}(idx, offset.StartBits, offset.FinalBits)
 	}
 
-	for i := range logProcessorWorkers {
-		wg.Add(1)
-		go func(lpw int) {
+	for i := 0; i < logProcessorWorkers; i++ {
+		wg.Add(2)
+		go func(workerID int) {
 			defer wg.Done()
 
 			reDefaultStructured := regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(\w+)\] \[([\w-]+)\] (.+)$`)
-			reJson := regexp.MustCompile(`^\{.*\}$`)
+			reJson := regexp.MustCompile(`^\s*\{[\s\S]*\}\s*$`)
 			reSimpleAlert := regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) (\w+) ([\w-]+) (.+)$`)
-			reHttp := regexp.MustCompile(`^(\S+) - - \[(.+?)\] "(\w+) (.+?) HTTP\/\d\.\d" (\d+) (\d+|-) ".*?" "(.*?)"$`)
+			reHttp := regexp.MustCompile(`^(\S+) - - \[(.*?)\] "(GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD) (.+?) HTTP/\d\.\d" (\d{3}) (\d+) "(.*?)" "(.*?)"$`)
 			reBracketsStructured := regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(\w+)\] \[([\w-]+)\] (.+)$`)
 			reLevelFirst := regexp.MustCompile(`^(\w+) (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) ([\w-]+) (.+)$`)
+			reDeadlock := regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[ERROR\] \[([\w-]+)\] Deadlock detected on table "(.+)"$`)
 
-			logFormatFactory := application.NewLogParserFactory(map[*regexp.Regexp]entity.LogParser{
-				reDefaultStructured:  parser.NewDefaultStructuredParser(reDefaultStructured),
-				reJson:               parser.NewJsonLogParser(reJson),
-				reSimpleAlert:        parser.NewSimpleAlertParser(reSimpleAlert),
-				reHttp:               parser.NewHttpLogParser(reHttp),
-				reBracketsStructured: parser.NewBracketsStructuredParser(reBracketsStructured),
-				reLevelFirst:         parser.NewLevelFirstParser(reLevelFirst),
-			})
+			patterns := []application.ParserPattern{
+				{Regex: reHttp, Parser: parser.NewHttpLogParser(reHttp)},
+				{Regex: reDeadlock, Parser: parser.NewDeadlockParser(reDeadlock)},
+				{Regex: reJson, Parser: parser.NewJsonLogParser(reJson)},
+				{Regex: reBracketsStructured, Parser: parser.NewBracketsStructuredParser(reBracketsStructured)},
+				{Regex: reLevelFirst, Parser: parser.NewLevelFirstParser(reLevelFirst)},
+				{Regex: reSimpleAlert, Parser: parser.NewSimpleAlertParser(reSimpleAlert)},
+				{Regex: reDefaultStructured, Parser: parser.NewDefaultStructuredParser(reDefaultStructured)},
+			}
+			
+			logFormatFactory := application.NewLogParserFactory(patterns)
 
 			processor := application.NewLogProcessor(
 				batchLineSize,
+				batchLimitTimeout,
 				rawLogsConsumer,
 				processedLogsProducer,
 				logFormatFactory,
 				transformRepository,
 			)
-			
-			if err := processor.ProcessLogs(); err != nil {
+
+			if err := processor.ProcessLogs(ctx); err != nil {
 				log.Printf("Log processor error: %v", err)
 			}
 		}(i)
 	}
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for msg := range processedLogsConsumer.Messages() {
-			log.Printf("Inserting into MongoDB: %s", msg)
-		}
-	}()
 
 	wg.Wait()
 
@@ -146,5 +158,5 @@ func main() {
 	processedLogsProducer.Close()
 	processedLogsConsumer.Close()
 
-	log.Printf("Execution time: %.2f seconds", time.Since(start).Seconds())
+	mgoConn.Disconnect(ctx)
 }

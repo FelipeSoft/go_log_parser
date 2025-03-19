@@ -15,12 +15,13 @@ func Test_HttpLogParser(t *testing.T) {
 		`192.168.239.48 - - [09/Mar/2025:15:03:29 +0000] "DELETE /api/v1/reports/341 HTTP/1.1" 200 2048 "-" "Mozilla/5.0 (Linux; Android 11)"`,
 	}
 
-	httpLogParser := parser.NewHttpLogParser(regexp.MustCompile(`^(\S+) - - \[(.+?)\] "(\w+) (.+?) HTTP\/\d\.\d" (\d+) \d+.*?"(.*?)"$`))
+	reHttp := regexp.MustCompile(`^(\S+) - - \[(.*?)\] "(GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD) (.+?) HTTP/\d\.\d" (\d{3}) (\d+) "(.*?)" "(.*?)"$`)
+	httpLogParser := parser.NewHttpLogParser(reHttp)
 
 	for _, tc := range testCases {
 		output, err := httpLogParser.Parse(tc)
 		if err != nil {
-			t.Fatal(err.Error())
+			t.Fatalf("Falha ao analisar a linha: %v", err)
 		}
 		log.Print(output)
 	}

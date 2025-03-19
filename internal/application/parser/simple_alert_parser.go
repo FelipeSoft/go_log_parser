@@ -16,6 +16,10 @@ func NewSimpleAlertParser(regex *regexp.Regexp) *SimpleAlertParser {
 	return &SimpleAlertParser{regex: regex}
 }
 
+func (p *SimpleAlertParser) PreservesRaw() bool {
+    return false
+}
+
 func (p *SimpleAlertParser) Parse(line string) (entity.LogEntry, error) {
 	matches := p.regex.FindStringSubmatch(line)
 	if matches == nil {

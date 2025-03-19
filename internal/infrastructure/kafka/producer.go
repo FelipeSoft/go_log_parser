@@ -16,7 +16,6 @@ type KafkaProducer struct {
 func NewKafkaProducer(topic string) *KafkaProducer {
 	producer, err := kafka.NewProducer(&kafka.ConfigMap{
 		"bootstrap.servers": os.Getenv("KAFKA_BOOTSTRAP_SERVER"),
-		"message.timeout.ms": 3000,
 	})
 	if err != nil {
 		log.Fatalf("error creating producer: %v", err)
@@ -58,6 +57,6 @@ func (p *KafkaProducer) Send(message string) error {
 }
 
 func (p *KafkaProducer) Close() {
-	p.producer.Flush(3000)
-	p.producer.Close()
+    p.producer.Flush(15 * 1000) 
+    p.producer.Close()
 }

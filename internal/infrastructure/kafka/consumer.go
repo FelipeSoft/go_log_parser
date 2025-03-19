@@ -21,6 +21,8 @@ func NewKafkaConsumer(topic, groupID string) *KafkaConsumer {
 		"auto.offset.reset":  "earliest",
 		"enable.auto.commit": "false",
 	})
+	consumer.SubscribeTopics([]string{topic}, nil)
+
 	if err != nil {
 		log.Fatalf("error creating consumer: %v", err)
 	}

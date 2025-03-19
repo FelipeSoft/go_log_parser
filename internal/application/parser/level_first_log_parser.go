@@ -16,6 +16,10 @@ func NewLevelFirstParser(regex *regexp.Regexp) *LevelFirstLogParser {
 	return &LevelFirstLogParser{regex: regex}
 }
 
+func (p *LevelFirstLogParser) PreservesRaw() bool {
+    return false
+}
+
 func (p *LevelFirstLogParser) Parse(line string) (entity.LogEntry, error) {
 	matches := p.regex.FindStringSubmatch(line)
 	if matches == nil {

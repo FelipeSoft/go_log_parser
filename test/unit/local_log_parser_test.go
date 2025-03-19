@@ -1,12 +1,14 @@
 package unit_test
 
 import (
+	"context"
 	"log"
 	"os"
 	"regexp"
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/etl_app_transform_service/internal/application"
 	"github.com/etl_app_transform_service/internal/application/parser"
@@ -20,6 +22,7 @@ func Test_LocalDynamicLogParser(t *testing.T) {
 	var chunkWorkers int = 5
 	var logProcessorWorkers int = 5
 	var wg sync.WaitGroup
+	var batchLimitTimeout time.Duration = 1 * time.Second
 
 	err := godotenv.Load("./../../.env")
 	if err != nil {
@@ -46,6 +49,7 @@ func Test_LocalDynamicLogParser(t *testing.T) {
 	processedLogsConsumer = memory.NewInMemoryConsumer(processedCh)
 
 	transformRepository := memory_repository.NewTransformMockRepository()
+
 	filepath := os.Getenv("LOG_SERVER_LOCAL_PATH")
 	file, err := os.Open(filepath)
 	if err != nil {
@@ -81,46 +85,58 @@ func Test_LocalDynamicLogParser(t *testing.T) {
 
 	for i := range logProcessorWorkers {
 		wg.Add(1)
-		go func(lpw int) {
+		go func(workerID int) {
 			defer wg.Done()
 
 			reDefaultStructured := regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(\w+)\] \[([\w-]+)\] (.+)$`)
-			reJson := regexp.MustCompile(`^\{.*\}$`)
+			reJson := regexp.MustCompile(`^\s*\{[\s\S]*\}\s*$`)
 			reSimpleAlert := regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) (\w+) ([\w-]+) (.+)$`)
-			reHttp := regexp.MustCompile(`^(\S+) - - \[(.+?)\] "(\w+) (.+?) HTTP\/\d\.\d" (\d+) (\d+|-) ".*?" "(.*?)"$`)
+			reHttp := regexp.MustCompile(`^(\S+) - - \[(.*?)\] "(GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD) (.+?) HTTP/\d\.\d" (\d{3}) (\d+) "(.*?)" "(.*?)"$`)
 			reBracketsStructured := regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(\w+)\] \[([\w-]+)\] (.+)$`)
 			reLevelFirst := regexp.MustCompile(`^(\w+) (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) ([\w-]+) (.+)$`)
+			reDeadlock := regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[ERROR\] \[([\w-]+)\] Deadlock detected on table "(.+)"$`)
 
-			logFormatFactory := application.NewLogParserFactory(map[*regexp.Regexp]entity.LogParser{
-				reDefaultStructured:  parser.NewDefaultStructuredParser(reDefaultStructured),
-				reJson:               parser.NewJsonLogParser(reJson),
-				reSimpleAlert:        parser.NewSimpleAlertParser(reSimpleAlert),
-				reHttp:               parser.NewHttpLogParser(reHttp),
-				reBracketsStructured: parser.NewBracketsStructuredParser(reBracketsStructured),
-				reLevelFirst:         parser.NewLevelFirstParser(reLevelFirst),
-			})
+			patterns := []application.ParserPattern{
+				{Regex: reHttp, Parser: parser.NewHttpLogParser(reHttp)},
+				{Regex: reDeadlock, Parser: parser.NewDeadlockParser(reDeadlock)},
+				{Regex: reJson, Parser: parser.NewJsonLogParser(reJson)},
+				{Regex: reBracketsStructured, Parser: parser.NewBracketsStructuredParser(reBracketsStructured)},
+				{Regex: reLevelFirst, Parser: parser.NewLevelFirstParser(reLevelFirst)},
+				{Regex: reSimpleAlert, Parser: parser.NewSimpleAlertParser(reSimpleAlert)},
+				{Regex: reDefaultStructured, Parser: parser.NewDefaultStructuredParser(reDefaultStructured)},
+			}
 
-			logProcessorWorker := application.NewLogProcessor(
+			logFormatFactory := application.NewLogParserFactory(patterns)
+
+			processor := application.NewLogProcessor(
 				batchLineSize,
+				batchLimitTimeout,
 				rawLogsConsumer,
 				processedLogsProducer,
 				logFormatFactory,
 				transformRepository,
 			)
-			logProcessorWorker.ProcessLogs()
+
+			if err := processor.ProcessLogs(context.Background()); err != nil {
+				log.Printf("Log processor error: %v", err)
+			}
 		}(i)
 	}
 
+	wg.Add(1)
 	go func() {
-		for msg := range processedLogsConsumer.Messages() {
-			log.Printf("Inserting into MongoDB: %s", msg)
+		defer wg.Done()
+		for msg := range processedCh {
+			t.Log(msg)
 		}
 	}()
 
-	wg.Wait()
-
-	rawLogsProducer.Close()
-	rawLogsConsumer.Close()
-	processedLogsProducer.Close()
-	processedLogsConsumer.Close()
+	go func() {
+		wg.Wait()
+		close(processedCh)
+		rawLogsProducer.Close()
+		rawLogsConsumer.Close()
+		processedLogsProducer.Close()
+		processedLogsConsumer.Close()
+	}()
 }

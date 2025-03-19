@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"regexp"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/etl_app_transform_service/internal/application"
@@ -17,6 +19,7 @@ import (
 )
 
 func main() {
+	var wg sync.WaitGroup
 	start := time.Now()
 
 	err := godotenv.Load("./../../.env")
@@ -71,57 +74,73 @@ func main() {
 	}
 
 	filesize := fileInfo.Size()
-	
-	chunkProcessor := application.NewChunkProcessor(
-		filepath,
-		0,
-		filesize,
-		nil, 
-		rawLogsProducer,
-	)
 
-	_, err = chunkProcessor.ProcessChunk()
-	if err != nil {
-		log.Fatalf("Error processing chunk: %v", err)
-	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		chunkProcessor := application.NewChunkProcessor(
+			filepath,
+			0,
+			filesize,
+			&wg,
+			rawLogsProducer,
+		)
 
+		_, err = chunkProcessor.ProcessChunk()
+		if err != nil {
+			log.Fatalf("Error processing chunk: %v", err)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		reDefaultStructured := regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(\w+)\] \[([\w-]+)\] (.+)$`)
+		reJson := regexp.MustCompile(`^\s*\{[\s\S]*\}\s*$`)
+		reSimpleAlert := regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) (\w+) ([\w-]+) (.+)$`)
+		reHttp := regexp.MustCompile(`^(\S+) - - \[(.*?)\] "(GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD) (.+?) HTTP/\d\.\d" (\d{3}) (\d+) "(.*?)" "(.*?)"$`)
+		reBracketsStructured := regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(\w+)\] \[([\w-]+)\] (.+)$`)
+		reLevelFirst := regexp.MustCompile(`^(\w+) (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) ([\w-]+) (.+)$`)
+		reDeadlock := regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[ERROR\] \[([\w-]+)\] Deadlock detected on table "(.+)"$`)
+
+		patterns := []application.ParserPattern{
+			{Regex: reDeadlock, Parser: parser.NewDeadlockParser(reDeadlock)},
+			{Regex: reHttp, Parser: parser.NewHttpLogParser(reHttp)},
+			{Regex: reJson, Parser: parser.NewJsonLogParser(reJson)},
+			{Regex: reBracketsStructured, Parser: parser.NewBracketsStructuredParser(reBracketsStructured)},
+			{Regex: reLevelFirst, Parser: parser.NewLevelFirstParser(reLevelFirst)},
+			{Regex: reSimpleAlert, Parser: parser.NewSimpleAlertParser(reSimpleAlert)},
+			{Regex: reDefaultStructured, Parser: parser.NewDefaultStructuredParser(reDefaultStructured)},
+		}
+
+		logFormatFactory := application.NewLogParserFactory(patterns)
+
+		logProcessor := application.NewLogProcessor(
+			batchLineSize,
+			1*time.Second,
+			rawLogsConsumer,
+			processedLogsProducer,
+			logFormatFactory,
+			transformRepository,
+		)
+
+		if err = logProcessor.ProcessLogs(context.Background()); err != nil {
+			log.Fatalf("Error processing logs: %v", err)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for msg := range processedLogsConsumer.Messages() {
+			log.Printf("Inserting into MongoDB: %s", msg)
+		}
+	}()
+
+	wg.Wait()
 	rawLogsProducer.Close()
-
-	reDefaultStructured := regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(\w+)\] \[([\w-]+)\] (.+)$`)
-	reJson := regexp.MustCompile(`^\{.*\}$`)
-	reSimpleAlert := regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) (\w+) ([\w-]+) (.+)$`)
-	reHttp := regexp.MustCompile(`^(\S+) - - \[(.+?)\] "(\w+) (.+?) HTTP\/\d\.\d" (\d+) (\d+|-) ".*?" "(.*?)"$`)
-	reBracketsStructured := regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(\w+)\] \[([\w-]+)\] (.+)$`)
-	reLevelFirst := regexp.MustCompile(`^(\w+) (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) ([\w-]+) (.+)$`)
-
-	logFormatFactory := application.NewLogParserFactory(map[*regexp.Regexp]entity.LogParser{
-		reDefaultStructured:  parser.NewDefaultStructuredParser(reDefaultStructured),
-		reJson:               parser.NewJsonLogParser(reJson),
-		reSimpleAlert:        parser.NewSimpleAlertParser(reSimpleAlert),
-		reHttp:               parser.NewHttpLogParser(reHttp),
-		reBracketsStructured: parser.NewBracketsStructuredParser(reBracketsStructured),
-		reLevelFirst:         parser.NewLevelFirstParser(reLevelFirst),
-	})
-
-	logProcessor := application.NewLogProcessor(
-		batchLineSize,
-		rawLogsConsumer,
-		processedLogsProducer,
-		logFormatFactory,
-		transformRepository,
-	)
-
-	err = logProcessor.ProcessLogs()
-	if err != nil {
-		log.Fatalf("Error processing logs: %v", err)
-	}
-
 	rawLogsConsumer.Close()
-
-	for msg := range processedLogsConsumer.Messages() {
-		log.Printf("Inserting into MongoDB: %s", msg)
-	}
-
 	processedLogsProducer.Close()
 	processedLogsConsumer.Close()
 

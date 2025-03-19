@@ -18,8 +18,8 @@ func NewTransformMongoDBRepository(database *mongo.Client) *TransformRepositoryM
 }
 
 func (s *TransformRepositoryMongoDB) Transform(logEntries []entity.LogEntry) error {
-	for logEntry := range logEntries {
-		log.Printf("Log Entry: %v", &logEntry)
+	for _, logEntry := range logEntries {
+		log.Printf("Received on MongoDB: %v", logEntry)
 	}
 
 	return nil

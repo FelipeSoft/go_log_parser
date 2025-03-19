@@ -17,34 +17,36 @@ func NewHttpLogParser(regex *regexp.Regexp) *HttpLogParser {
 	return &HttpLogParser{regex: regex}
 }
 
+func (p *HttpLogParser) PreservesRaw() bool {
+    return false
+}
+
 func (p *HttpLogParser) Parse(line string) (entity.LogEntry, error) {
-	matches := p.regex.FindStringSubmatch(line)
-	if matches == nil {
-		return entity.LogEntry{}, fmt.Errorf("using the HttpLogParser does not match with the format provided on the line %s of the log", line)
-	}
+    matches := p.regex.FindStringSubmatch(line)
+    if len(matches) != 9 {
+        return entity.LogEntry{}, fmt.Errorf("invalid HTTP log error")
+    }
 
-	timestamp, err := time.Parse("02/Jan/2006:15:04:05 -0700", matches[2])
-	if err != nil {
-		return entity.LogEntry{}, fmt.Errorf("using the HttpLogParser an error occurred on the line %s of the log in the parsing time moment", line)
-	}
+    timestamp, err := time.Parse("02/Jan/2006:15:04:05 -0700", matches[2])
+    if err != nil {
+        return entity.LogEntry{}, err
+    }
 
-	integer, err := strconv.Atoi(matches[5])
+    statusCode, _ := strconv.Atoi(matches[5])
+    responseSize, _ := strconv.Atoi(matches[6])
 
-	if err != nil {
-		return entity.LogEntry{}, err
-	}
-
-	entry := entity.LogEntry{
-		Timestamp:  timestamp,
-		Level:      "INFO",
-		Service:    matches[3],
-		Message:    matches[4],
-		IPAddress:  &matches[1],
-		Method:     &matches[3],
-		Path:       &matches[4],
-		StatusCode: &integer,
-		UserAgent:  &matches[6],
-	}
-
-	return entry, nil
+    return entity.LogEntry{
+        Timestamp:  timestamp,
+        Level:      "INFO",
+        Service:    "api-gateway",
+        Message:    fmt.Sprintf("%s %s", matches[3], matches[4]),
+        IPAddress:  matches[1],
+        Method:     matches[3],
+        Path:       matches[4],
+        StatusCode: statusCode,
+        UserAgent:  matches[8],
+        Metadata: map[string]interface{}{
+            "response_size": responseSize,
+        },
+    }, nil
 }
