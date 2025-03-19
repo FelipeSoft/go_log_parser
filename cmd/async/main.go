@@ -76,7 +76,7 @@ func main() {
 	}
 
 	mgoConn := mongodb.StartConnection()
-	transformRepository := mongodb.NewTransformMongoDBRepository(mgoConn)
+	transformRepository := mongodb.NewTransformMongoDBRepository(mgoConn, os.Getenv("MONGODB_DATABASE"), "logs")
 
 	filepath := os.Getenv("LOG_SERVER_LOCAL_PATH")
 	file, err := os.Open(filepath)

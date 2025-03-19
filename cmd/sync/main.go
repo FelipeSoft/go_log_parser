@@ -20,7 +20,6 @@ import (
 
 func main() {
 	var wg sync.WaitGroup
-	start := time.Now()
 
 	err := godotenv.Load("./../../.env")
 	if err != nil {
@@ -59,7 +58,7 @@ func main() {
 	}
 
 	mgoConn := mongodb.StartConnection()
-	transformRepository := mongodb.NewTransformMongoDBRepository(mgoConn)
+	transformRepository := mongodb.NewTransformMongoDBRepository(mgoConn, os.Getenv("MONGODB_DATABASE"), "logs")
 
 	filepath := os.Getenv("LOG_SERVER_LOCAL_PATH")
 	file, err := os.Open(filepath)
@@ -92,7 +91,7 @@ func main() {
 		}
 	}()
 
-	wg.Add(1)
+	wg.Add(2)
 	go func() {
 		defer wg.Done()
 
@@ -130,21 +129,9 @@ func main() {
 		}
 	}()
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for msg := range processedLogsConsumer.Messages() {
-			log.Printf("Inserting into MongoDB: %s", msg)
-		}
-	}()
-
 	wg.Wait()
 	rawLogsProducer.Close()
 	rawLogsConsumer.Close()
 	processedLogsProducer.Close()
 	processedLogsConsumer.Close()
-
-	end := time.Now()
-	finishedAt := end.Sub(start)
-	log.Printf("Program finished in %f seconds", finishedAt.Seconds())
 }
