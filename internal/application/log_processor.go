@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/etl_app_transform_service/internal/domain/entity"
+	metrics "github.com/etl_app_transform_service/internal/infrastructure/prometheus"
 )
 
 var (
@@ -16,7 +17,7 @@ var (
 		received  int64
 		processed int64
 	}
-	muCounter sync.RWMutex
+	muCounter              sync.RWMutex
 )
 
 type LogProcessor struct {
@@ -93,7 +94,15 @@ func (lp *LogProcessor) ProcessLogs(ctx context.Context) error {
 			counter.received++
 			muCounter.Unlock()
 
-			logEntry, err := lp.processMessage(msg)
+			var rawEntry entity.RawEntry
+			err := json.Unmarshal([]byte(msg), &rawEntry)
+			if err != nil {
+				return fmt.Errorf("processMessage failed during unmarshal: %v", err)
+			}
+
+			logEntry, err := lp.processMessage(rawEntry)
+			logEntry.StartAt = time.Now()
+
 			if err != nil {
 				muCounter.Lock()
 				counter.received--
@@ -128,7 +137,13 @@ func (lp *LogProcessor) ProcessLogs(ctx context.Context) error {
 			for {
 				select {
 				case msg := <-lp.consumer.Messages():
-					logEntry, err := lp.processMessage(msg)
+					var rawEntry entity.RawEntry
+					err := json.Unmarshal([]byte(msg), &rawEntry)
+					if err != nil {
+						return fmt.Errorf("processMessage failed during unmarshal: %v", err)
+					}
+
+					logEntry, err := lp.processMessage(rawEntry)
 					if err == nil {
 						batch = append(batch, logEntry)
 					}
@@ -144,13 +159,17 @@ func (lp *LogProcessor) ProcessLogs(ctx context.Context) error {
 	}
 }
 
-func (lp *LogProcessor) processMessage(msg string) (entity.LogEntry, error) {
+func (lp *LogProcessor) processMessage(rawEntry entity.RawEntry) (entity.LogEntry, error) {
+	msg := rawEntry.Raw
+
 	parser, err := lp.logParserFactory.GetParser(msg)
 	if err != nil {
 		return entity.LogEntry{}, fmt.Errorf("get parser failed: %v", err)
 	}
 
 	logEntry, err := parser.Parse(msg)
+	logEntry.StartAt = rawEntry.StartAt
+
 	if err != nil {
 		return entity.LogEntry{}, fmt.Errorf("parse failed: %v", err)
 	}
@@ -165,28 +184,31 @@ func (lp *LogProcessor) processMessage(msg string) (entity.LogEntry, error) {
 		}
 	}
 
-	if err := lp.producer.Send(string(data)); err != nil {
+	err = lp.producer.Send(string(data));
+	if err != nil {
 		return entity.LogEntry{}, fmt.Errorf("send failed: %v", err)
+	} else {
+		metrics.LogProcessingBySeconds.Inc()
 	}
 
 	return logEntry, nil
 }
 
 func (lp *LogProcessor) flushBatch(batch []entity.LogEntry) {
-    if len(batch) == 0 {
-        return
-    }
-    
-    const maxRetries = 3
-    for i := range maxRetries {
-        if err := lp.transformRepository.Transform(batch); err == nil {
-            muCounter.Lock()
-            counter.processed += int64(len(batch))
-            muCounter.Unlock()
-            return
-        }
-        time.Sleep(time.Duration(i*100) * time.Millisecond)
-    }
+	if len(batch) == 0 {
+		return
+	}
 
-    log.Printf("Persistent fail on insert batch of %d lines", len(batch))
-}	
+	const maxRetries = 3
+	for i := range maxRetries {
+		if err := lp.transformRepository.Transform(batch); err == nil {
+			muCounter.Lock()
+			counter.processed += int64(len(batch))
+			muCounter.Unlock()
+			return
+		}
+		time.Sleep(time.Duration(i*100) * time.Millisecond)
+	}
+
+	log.Printf("Persistent fail on insert batch of %d lines", len(batch))
+}

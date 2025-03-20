@@ -2,11 +2,13 @@ package application
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/etl_app_transform_service/internal/domain/entity"
 )
@@ -33,56 +35,53 @@ func NewChunkProcessor(filepath string, offsetStart, offsetEnd int64, producer e
 }
 
 func DefineChunkWorkers(workers int64, filesize int64, filepath string) []Chunk {
-    file, err := os.Open(filepath)
-    if err != nil {
-        log.Fatalf("Error opening file: %v", err)
-    }
-    defer file.Close()
+	file, err := os.Open(filepath)
+	if err != nil {
+		log.Fatalf("Error opening file: %v", err)
+	}
+	defer file.Close()
 
-    chunks := make([]Chunk, 0, workers)
-    var start int64 = 0
+	chunks := make([]Chunk, 0, workers)
+	var start int64 = 0
 
-    for i := int64(0); i < workers && start < filesize; i++ {
-        remainingWorkers := workers - i
-        chunkSize := (filesize - start + remainingWorkers - 1) / remainingWorkers
+	for i := int64(0); i < workers && start < filesize; i++ {
+		remainingWorkers := workers - i
+		chunkSize := (filesize - start + remainingWorkers - 1) / remainingWorkers
 
-        end := start + chunkSize
-        if end > filesize {
-            end = filesize
-        }
+		end := min(start+chunkSize, filesize)
 
-        _, err = file.Seek(end, 0)
-        if err != nil {
-            log.Fatalf("Seek error: %v", err)
-        }
+		_, err = file.Seek(end, 0)
+		if err != nil {
+			log.Fatalf("Seek error: %v", err)
+		}
 
-        reader := bufio.NewReader(file)
-        line, err := reader.ReadBytes('\n')
-        
-        var adjustedEnd int64
-        switch {
-        case err == io.EOF:
-            adjustedEnd = filesize
-        case err != nil:
-            log.Fatalf("Read error: %v", err)
-        default:
-            adjustedEnd = end + int64(len(line))
-        }
+		reader := bufio.NewReader(file)
+		line, err := reader.ReadBytes('\n')
 
-        adjustedEnd = min(adjustedEnd, filesize)
+		var adjustedEnd int64
+		switch {
+		case err == io.EOF:
+			adjustedEnd = filesize
+		case err != nil:
+			log.Fatalf("Read error: %v", err)
+		default:
+			adjustedEnd = end + int64(len(line))
+		}
 
-        if start < adjustedEnd {
-            chunks = append(chunks, Chunk{
-                StartBits: start,
-                FinalBits: adjustedEnd,
-            })
-            start = adjustedEnd
-        } else {
-            break
-        }
-    }
+		adjustedEnd = min(adjustedEnd, filesize)
 
-    return chunks
+		if start < adjustedEnd {
+			chunks = append(chunks, Chunk{
+				StartBits: start,
+				FinalBits: adjustedEnd,
+			})
+			start = adjustedEnd
+		} else {
+			break
+		}
+	}
+
+	return chunks
 }
 
 func (c *ChunkProcessor) ProcessChunk() (*int, error) {
@@ -130,8 +129,17 @@ func (c *ChunkProcessor) ProcessChunk() (*int, error) {
 		}
 
 		line := strings.TrimSpace(string(lineBytes))
+		rawEntry := entity.RawEntry{
+			StartAt: time.Now(),
+			Raw:     line,
+		}
 
-		if err := c.producer.Send(line); err != nil {
+		rawEntryBytes, err := json.Marshal(rawEntry)
+		if err != nil {
+			return nil, fmt.Errorf("error parse line: %v", err)
+		}
+
+		if err := c.producer.Send(string(rawEntryBytes)); err != nil {
 			return nil, fmt.Errorf("error sending line: %v", err)
 		}
 
