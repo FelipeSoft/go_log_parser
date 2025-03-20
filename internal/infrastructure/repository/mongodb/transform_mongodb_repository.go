@@ -20,8 +20,6 @@ func NewTransformMongoDBRepository(client *mongo.Client, dbName, collectionName 
 }
 
 func (r *TransformRepositoryMongoDB) Transform(logEntries []entity.LogEntry) error {
-	log.Printf("Received batch of %d entries for MongoDB insertion", len(logEntries))
-
 	if len(logEntries) == 0 {
 		log.Println("No entries to insert")
 		return nil
@@ -38,7 +36,5 @@ func (r *TransformRepositoryMongoDB) Transform(logEntries []entity.LogEntry) err
 		return err
 	}
 
-	log.Printf("Successfully inserted %d documents", len(logEntries))
 	return nil
 }
-

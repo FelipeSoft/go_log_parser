@@ -22,22 +22,21 @@ import (
 
 func main() {
 	var chunkWorkers int = 20
-	var logProcessorWorkers int = 20
-	var wg sync.WaitGroup
+	var logProcessorWorkers int = 10
+	var chunkWg, logWg sync.WaitGroup
 	var batchLimitTimeout time.Duration = 1 * time.Second
 
-	ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
 
 	sigChan := make(chan os.Signal, 1)
-    signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-    go func() {
-        <-sigChan
-        cancel()  // Cancela o contexto para iniciar o shutdown
-        log.Println("Shutting down gracefully...")
-    }()
-
+	go func() {
+		<-sigChan
+		cancel()
+		log.Println("Shutting down gracefully...")
+	}()
 
 	err := godotenv.Load("./../../.env")
 	if err != nil {
@@ -91,18 +90,17 @@ func main() {
 	}
 
 	filesize := fileInfo.Size()
-	workersOffset := application.DefineChunkWorkers(int64(chunkWorkers), filesize)
+	workersOffset := application.DefineChunkWorkers(int64(chunkWorkers), filesize, os.Getenv("LOG_SERVER_LOCAL_PATH"))
 
 	for idx, offset := range workersOffset {
-		wg.Add(1)
+		chunkWg.Add(1)
 		go func(worker int, startBits int64, finalBits int64) {
-			defer wg.Done()
+			defer chunkWg.Done()
 			chunkProcessor := application.NewChunkProcessor(
 				filepath,
 				startBits,
 				finalBits,
-				&wg,
-				rawLogsProducer, // Inject producer
+				rawLogsProducer,
 			)
 			_, err := chunkProcessor.ProcessChunk()
 			if err != nil {
@@ -112,9 +110,9 @@ func main() {
 	}
 
 	for i := 0; i < logProcessorWorkers; i++ {
-		wg.Add(2)
+		logWg.Add(1)
 		go func(workerID int) {
-			defer wg.Done()
+			defer logWg.Done()
 
 			reDefaultStructured := regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(\w+)\] \[([\w-]+)\] (.+)$`)
 			reJson := regexp.MustCompile(`^\s*\{[\s\S]*\}\s*$`)
@@ -133,7 +131,7 @@ func main() {
 				{Regex: reSimpleAlert, Parser: parser.NewSimpleAlertParser(reSimpleAlert)},
 				{Regex: reDefaultStructured, Parser: parser.NewDefaultStructuredParser(reDefaultStructured)},
 			}
-			
+
 			logFormatFactory := application.NewLogParserFactory(patterns)
 
 			processor := application.NewLogProcessor(
@@ -151,12 +149,34 @@ func main() {
 		}(i)
 	}
 
-	wg.Wait()
+	go func() {
+		ticker := time.NewTicker(500 * time.Millisecond)
+		for {
+			<-ticker.C
+			received, processed := application.GetMetrics()
+			log.Printf("Throughput: received=%d, processed=%d, pending=%d",
+				received,
+				processed,
+				received-processed)
+		}
+	}()
 
-	rawLogsProducer.Close()
-	rawLogsConsumer.Close()
-	processedLogsProducer.Close()
-	processedLogsConsumer.Close()
+	chunkWg.Wait()
+    rawLogsProducer.Close()
+
+
+    logWg.Wait()
+
+    received, processed := application.GetMetrics()
+    if received != processed {
+        log.Printf("Pending data after shutdown: received=%d, processed=%d", received, processed)
+    }
+
+	if useKafka {
+		rawLogsConsumer.Close()
+		processedLogsProducer.Close()
+		processedLogsConsumer.Close()
+	}
 
 	mgoConn.Disconnect(ctx)
 }

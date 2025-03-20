@@ -63,7 +63,7 @@ func Test_LocalDynamicLogParser(t *testing.T) {
 	}
 
 	filesize := fileInfo.Size()
-	workersOffset := application.DefineChunkWorkers(int64(chunkWorkers), filesize)
+	workersOffset := application.DefineChunkWorkers(int64(chunkWorkers), filesize, os.Getenv("MOCK_LOG_SERVER_LOCAL_PATH"))
 
 	for idx, offset := range workersOffset {
 		wg.Add(1)
@@ -73,8 +73,7 @@ func Test_LocalDynamicLogParser(t *testing.T) {
 				filepath,
 				startBits,
 				finalBits,
-				&wg,
-				rawLogsProducer, // Inject producer
+				rawLogsProducer,
 			)
 			_, err := chunkProcessor.ProcessChunk()
 			if err != nil {
