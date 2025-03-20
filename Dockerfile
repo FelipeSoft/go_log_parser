@@ -4,7 +4,7 @@ WORKDIR /app
 COPY . .
 
 RUN go mod download
-RUN CGO_ENABLED=0 GOOS=linux go build -o etl_app .
+RUN CGO_ENABLED=0 GOOS=windows go build -o etl_app .
 
 FROM alpine:latest
 

@@ -26,20 +26,8 @@ services:
     networks:
       - monitoring
 
-  etl_app:
-    image: etl_app:latest
-    container_name: etl_app
-    build:
-      context: ../
-      dockerfile: Dockerfile
-    ports:
-      - '8080:8080'
-    networks:
-      - monitoring
-
 volumes:
   grafana-storage:
-
 
 networks:
   monitoring:
