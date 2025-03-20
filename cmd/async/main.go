@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
+	"runtime"
 	"strconv"
 	"sync"
 	"syscall"
@@ -21,10 +22,11 @@ import (
 )
 
 func main() {
-	var chunkWorkers int = 20
-	var logProcessorWorkers int = 10
 	var chunkWg, logWg sync.WaitGroup
-	var batchLimitTimeout time.Duration = 1 * time.Second
+	var batchLimitTimeout time.Duration = 500 * time.Millisecond
+	numCPU := runtime.NumCPU()
+	chunkWorkers := numCPU
+	logProcessorWorkers := numCPU * 2
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
@@ -150,7 +152,7 @@ func main() {
 	}
 
 	go func() {
-		ticker := time.NewTicker(500 * time.Millisecond)
+		ticker := time.NewTicker(1000 * time.Millisecond)
 		for {
 			<-ticker.C
 			received, processed := application.GetMetrics()
