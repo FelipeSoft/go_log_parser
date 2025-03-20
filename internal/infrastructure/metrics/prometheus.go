@@ -11,13 +11,13 @@ var (
 	)
 
 	LogProcessingLatency = prometheus.NewHistogramVec(
-        prometheus.HistogramOpts{
-            Name:    "log_processing_latency_milliseconds",
-            Help:    "Latency of log processing in milliseconds",
-            Buckets: prometheus.DefBuckets,
-        },
-        []string{"service"},
-    )
+		prometheus.HistogramOpts{
+			Name:    "log_processing_latency_milliseconds",
+			Help:    "Latency of log processing in milliseconds",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"service"},
+	)
 )
 
 func init() {

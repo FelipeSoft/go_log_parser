@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/etl_app_transform_service/internal/domain/entity"
-	metrics "github.com/etl_app_transform_service/internal/infrastructure/prometheus"
+	"github.com/etl_app_transform_service/internal/infrastructure/metrics"
 )
 
 var (
