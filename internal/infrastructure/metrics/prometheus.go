@@ -21,6 +21,6 @@ var (
 )
 
 func init() {
-	prometheus.Register(LogProcessingBySeconds)
-	prometheus.Register(LogProcessingLatency)
+	prometheus.MustRegister(LogProcessingBySeconds)
+	prometheus.MustRegister(LogProcessingLatency)
 }
