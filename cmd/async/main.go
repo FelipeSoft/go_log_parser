@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"regexp"
@@ -19,9 +20,24 @@ import (
 	"github.com/etl_app_transform_service/internal/infrastructure/memory"
 	"github.com/etl_app_transform_service/internal/infrastructure/repository/mongodb"
 	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
+	var httpWg sync.WaitGroup
+	server := http.NewServeMux()
+	server.Handle("/metrics", promhttp.Handler())
+
+	httpWg.Add(1)
+	go func() {
+		defer httpWg.Done()
+		err := http.ListenAndServe("192.168.200.154:8080", server)
+		if err != nil {
+			log.Fatalf("Error on HTTP server starting: %v", err)
+		}
+	}()
+	log.Print("HTTP Server for metrics listening on 192.168.200.154:8080")
+	
 	var chunkWg, logWg sync.WaitGroup
 	var batchLimitTimeout time.Duration = 500 * time.Millisecond
 	numCPU := runtime.NumCPU()
@@ -166,7 +182,7 @@ func main() {
 	chunkWg.Wait()
     rawLogsProducer.Close()
 
-
+	httpWg.Wait()
     logWg.Wait()
 
     received, processed := application.GetMetrics()
