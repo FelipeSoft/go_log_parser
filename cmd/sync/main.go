@@ -81,7 +81,6 @@ func main() {
 			filepath,
 			0,
 			filesize,
-			&wg,
 			rawLogsProducer,
 		)
 
