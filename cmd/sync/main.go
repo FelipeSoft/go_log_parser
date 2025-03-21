@@ -35,6 +35,8 @@ func main() {
 	var rawLogsConsumer entity.MessageConsumer
 
 	useKafka := os.Getenv("USE_KAFKA") == "true"
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second * 3)
+	defer cancel()
 
 	if useKafka {
 		rawLogsProducer = kafka.NewKafkaProducer("raw_logs")
@@ -84,7 +86,7 @@ func main() {
 			rawLogsProducer,
 		)
 
-		_, err = chunkProcessor.ProcessChunk()
+		_, err = chunkProcessor.ProcessChunk(ctx)
 		if err != nil {
 			log.Fatalf("Error processing chunk: %v", err)
 		}

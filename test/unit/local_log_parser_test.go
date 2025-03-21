@@ -24,6 +24,9 @@ func Test_LocalDynamicLogParser(t *testing.T) {
 	var wg sync.WaitGroup
 	var batchLimitTimeout time.Duration = 1 * time.Second
 
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second * 3)
+	defer cancel()
+
 	err := godotenv.Load("./../../.env")
 	if err != nil {
 		log.Fatal("Could not load the environment variables file")
@@ -75,7 +78,7 @@ func Test_LocalDynamicLogParser(t *testing.T) {
 				finalBits,
 				rawLogsProducer,
 			)
-			_, err := chunkProcessor.ProcessChunk()
+			_, err := chunkProcessor.ProcessChunk(ctx)
 			if err != nil {
 				log.Printf("error during processing chunk: %v", err)
 			}

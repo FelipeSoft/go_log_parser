@@ -2,6 +2,7 @@ package application
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -84,7 +85,14 @@ func DefineChunkWorkers(workers int64, filesize int64, filepath string) []Chunk 
 	return chunks
 }
 
-func (c *ChunkProcessor) ProcessChunk() (*int, error) {
+func (c *ChunkProcessor) ProcessChunk(ctx context.Context) (*int, error) {
+	go func() {
+		select {
+		case <-ctx.Done():
+			return
+		}
+	}()
+
 	file, err := os.Open(c.filepath)
 	if err != nil {
 		return nil, fmt.Errorf("could not open file: %v", err)
