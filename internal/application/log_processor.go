@@ -17,7 +17,7 @@ var (
 		received  int64
 		processed int64
 	}
-	muCounter              sync.RWMutex
+	muCounter sync.RWMutex
 )
 
 type LogProcessor struct {
@@ -184,7 +184,7 @@ func (lp *LogProcessor) processMessage(rawEntry entity.RawEntry) (entity.LogEntr
 		}
 	}
 
-	err = lp.producer.Send(string(data));
+	err = lp.producer.Send(string(data))
 	if err != nil {
 		return entity.LogEntry{}, fmt.Errorf("send failed: %v", err)
 	} else {

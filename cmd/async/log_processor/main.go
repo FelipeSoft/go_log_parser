@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"regexp"
@@ -17,17 +18,36 @@ import (
 	"github.com/etl_app_transform_service/internal/domain/entity"
 	"github.com/etl_app_transform_service/internal/infrastructure/kafka"
 	"github.com/etl_app_transform_service/internal/infrastructure/memory"
+	_ "github.com/etl_app_transform_service/internal/infrastructure/metrics"
 	"github.com/etl_app_transform_service/internal/infrastructure/repository/mongodb"
 	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-func main() {	
+func main() {
 	var logWg sync.WaitGroup
 	var batchLimitTimeout time.Duration = 500 * time.Millisecond
 	numCPU := runtime.NumCPU()
 	logProcessorWorkers := numCPU * 2
+	httpMetricServer := http.NewServeMux()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	err := godotenv.Load("./../../../.env")
+	if err != nil {
+		log.Fatal("Could not load the environment variables file")
+	}
+
+	metricsHost := os.Getenv("METRICS_HOST_LOG_PROCESSOR")
+	httpMetricServer.Handle("/metrics", promhttp.Handler())
+
+	go func() {
+		err = http.ListenAndServe(metricsHost, httpMetricServer)
+		if err != nil {
+			log.Fatalf("Error on HTTP server starting: %v", err)
+		}
+	}()
+	log.Printf("HTTP Server for metrics on Log Processor listening on %s", metricsHost)
+
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	sigChan := make(chan os.Signal, 1)
@@ -38,11 +58,6 @@ func main() {
 		cancel()
 		log.Println("Shutting down gracefully...")
 	}()
-
-	err := godotenv.Load("./../../../.env")
-	if err != nil {
-		log.Fatal("Could not load the environment variables file")
-	}
 
 	batchLineSize, err := strconv.Atoi(os.Getenv("BATCH_SIZE"))
 	if err != nil {
@@ -70,7 +85,7 @@ func main() {
 	mgoConn := mongodb.StartConnection()
 	transformRepository := mongodb.NewTransformMongoDBRepository(mgoConn, os.Getenv("MONGODB_DATABASE"), "logs")
 
-	for i := 0; i < logProcessorWorkers; i++ {
+	for i := range logProcessorWorkers {
 		logWg.Add(1)
 		go func(workerID int) {
 			defer logWg.Done()
@@ -110,7 +125,7 @@ func main() {
 		}(i)
 	}
 
-    logWg.Wait()
+	logWg.Wait()
 
 	if useKafka {
 		processedLogsProducer.Close()

@@ -15,12 +15,18 @@ import (
 	"github.com/etl_app_transform_service/internal/domain/entity"
 	"github.com/etl_app_transform_service/internal/infrastructure/kafka"
 	"github.com/etl_app_transform_service/internal/infrastructure/memory"
+	_ "github.com/etl_app_transform_service/internal/infrastructure/metrics"
 	"github.com/joho/godotenv"
 )
 
 func main() {
 	var chunkWg sync.WaitGroup
 	var rawLogsProducer entity.MessageProducer
+
+	err := godotenv.Load("./../../../.env")
+	if err != nil {
+		log.Fatal("Could not load the environment variables file")
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
@@ -33,11 +39,6 @@ func main() {
 		cancel()
 		log.Println("Shutting down gracefully...")
 	}()
-
-	err := godotenv.Load("./../../../.env")
-	if err != nil {
-		log.Fatal("Could not load the environment variables file")
-	}
 
 	useKafka := os.Getenv("USE_KAFKA") == "true"
 	batchLineSize, err := strconv.Atoi(os.Getenv("BATCH_SIZE"))
@@ -88,6 +89,7 @@ func main() {
 	}
 
 	chunkWg.Wait()
+
 	go func() {
 		rawLogsProducer.Close()
 

@@ -87,10 +87,7 @@ func DefineChunkWorkers(workers int64, filesize int64, filepath string) []Chunk 
 
 func (c *ChunkProcessor) ProcessChunk(ctx context.Context) (*int, error) {
 	go func() {
-		select {
-		case <-ctx.Done():
-			return
-		}
+		<-ctx.Done()
 	}()
 
 	file, err := os.Open(c.filepath)
