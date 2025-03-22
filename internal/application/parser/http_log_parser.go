@@ -13,7 +13,7 @@ type HttpLogParser struct {
 	regex *regexp.Regexp
 }
 
-func NewHttpLogParser(regex *regexp.Regexp) *HttpLogParser {
+func NewHttpLogParser(regex *regexp.Regexp) entity.LogParser {
 	return &HttpLogParser{regex: regex}
 }
 

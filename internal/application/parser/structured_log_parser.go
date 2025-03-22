@@ -12,7 +12,7 @@ type DefaultStructuredParser struct {
 	regex *regexp.Regexp
 }
 
-func NewDefaultStructuredParser(regex *regexp.Regexp) *DefaultStructuredParser {
+func NewDefaultStructuredParser(regex *regexp.Regexp) entity.LogParser {
 	return &DefaultStructuredParser{regex: regex}
 }
 

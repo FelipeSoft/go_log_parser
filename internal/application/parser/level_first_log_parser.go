@@ -12,7 +12,7 @@ type LevelFirstLogParser struct {
 	regex *regexp.Regexp
 }
 
-func NewLevelFirstParser(regex *regexp.Regexp) *LevelFirstLogParser {
+func NewLevelFirstParser(regex *regexp.Regexp) entity.LogParser {
 	return &LevelFirstLogParser{regex: regex}
 }
 

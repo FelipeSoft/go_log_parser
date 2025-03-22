@@ -12,7 +12,7 @@ type BracketsStructuredParser struct {
 	regex *regexp.Regexp
 }
 
-func NewBracketsStructuredParser(regex *regexp.Regexp) *BracketsStructuredParser {
+func NewBracketsStructuredParser(regex *regexp.Regexp) entity.LogParser {
 	return &BracketsStructuredParser{regex: regex}
 }
 

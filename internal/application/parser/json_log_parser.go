@@ -13,7 +13,7 @@ type JsonLogParser struct {
     regex *regexp.Regexp
 }
 
-func NewJsonLogParser(regex *regexp.Regexp) *JsonLogParser {
+func NewJsonLogParser(regex *regexp.Regexp) entity.LogParser {
     return &JsonLogParser{regex: regex}
 }
 

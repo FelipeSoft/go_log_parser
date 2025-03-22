@@ -29,7 +29,7 @@ func (r *TransformRepositoryMongoDB) Transform(logEntries []entity.LogEntry) err
 	documents := make([]any, len(logEntries))
 	for i, entry := range logEntries {
 		latency := entry.CalculateTotalProcessedTimeByMilliseconds()	
-		metrics.LogProcessingLatency.WithLabelValues("processed_logs").Observe(float64(latency))
+		metrics.LogProcessingLatency.WithLabelValues(entry.Service).Observe(float64(latency))
 		documents[i] = entry
 	}
 

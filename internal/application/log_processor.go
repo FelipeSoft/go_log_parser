@@ -5,19 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"runtime"
 	"sync"
 	"time"
 
 	"github.com/etl_app_transform_service/internal/domain/entity"
 	"github.com/etl_app_transform_service/internal/infrastructure/metrics"
-)
-
-var (
-	counter struct {
-		received  int64
-		processed int64
-	}
-	muCounter sync.RWMutex
+	"slices"
 )
 
 type LogProcessor struct {
@@ -27,6 +21,8 @@ type LogProcessor struct {
 	producer            entity.MessageProducer
 	logParserFactory    *LogParserFactory
 	transformRepository entity.TransformRepository
+	batchChan           chan entity.LogEntry
+	wg                  sync.WaitGroup
 }
 
 func NewLogProcessor(
@@ -37,178 +33,139 @@ func NewLogProcessor(
 	logParserFactory *LogParserFactory,
 	transformRepository entity.TransformRepository,
 ) *LogProcessor {
-	return &LogProcessor{
+	lp := &LogProcessor{
 		batchLinesSize:      batchLinesSize,
 		batchTimeout:        batchTimeout,
 		consumer:            consumer,
 		producer:            producer,
 		logParserFactory:    logParserFactory,
 		transformRepository: transformRepository,
+		batchChan:           make(chan entity.LogEntry, batchLinesSize*2),
+	}
+
+	lp.startBatchWorkers(runtime.NumCPU())
+	return lp
+}
+
+func (lp *LogProcessor) startBatchWorkers(workerCount int) {
+	lp.wg.Add(workerCount)
+	for i := 0; i < workerCount; i++ {
+		go func() {
+			defer lp.wg.Done()
+			lp.batchWorker()
+		}()
 	}
 }
 
-func GetMetrics() (int64, int64) {
-	muCounter.RLock()
-	defer muCounter.RUnlock()
-	return counter.received, counter.processed
-}
-
-func (lp *LogProcessor) ProcessLogs(ctx context.Context) error {
-	var (
-		mu          sync.Mutex
-		batch       []entity.LogEntry
-		flushSignal = make(chan struct{}, 1)
-	)
-	defer func() {
-		mu.Lock()
-		lp.flushBatch(batch)
-		mu.Unlock()
-	}()
-
+func (lp *LogProcessor) batchWorker() {
+	var batch []entity.LogEntry
 	ticker := time.NewTicker(lp.batchTimeout)
 	defer ticker.Stop()
 
-	go func() {
-		defer close(flushSignal)
-		for {
-			select {
-			case <-ticker.C:
-				flushSignal <- struct{}{}
-			case <-ctx.Done():
+	for {
+		select {
+		case entry, ok := <-lp.batchChan:
+			if !ok {
+				lp.safeFlush(batch)
 				return
 			}
+			batch = append(batch, entry)
+			if len(batch) >= lp.batchLinesSize {
+				lp.safeFlush(batch)
+				batch = nil
+			}
+
+		case <-ticker.C:
+			lp.safeFlush(batch)
+			batch = nil
 		}
-	}()
+	}
+}
+
+func (lp *LogProcessor) ProcessLogs(ctx context.Context) error {
+	defer close(lp.batchChan)
 
 	for {
 		select {
 		case msg, ok := <-lp.consumer.Messages():
 			if !ok {
-				mu.Lock()
-				lp.flushBatch(batch)
-				mu.Unlock()
 				return nil
 			}
 
-			muCounter.Lock()
-			counter.received++
-			muCounter.Unlock()
-
-			var rawEntry entity.RawEntry
-			err := json.Unmarshal([]byte(msg), &rawEntry)
+			entry, err := lp.processSingleMessage(msg)
 			if err != nil {
-				return fmt.Errorf("processMessage failed during unmarshal: %v", err)
+				log.Printf("Processing error: %v", err)
+				continue
 			}
 
-			logEntry, err := lp.processMessage(rawEntry)
-			logEntry.StartAt = time.Now()
-
-			if err != nil {
-				muCounter.Lock()
-				counter.received--
-				muCounter.Unlock()
-
-				return fmt.Errorf("processMessage failed: %v", err)
+			// Envio bloqueante com timeout
+			select {
+			case lp.batchChan <- entry:
+				metrics.ReceivedMessages.Inc()
+			case <-ctx.Done():
+				return ctx.Err()
 			}
-
-			mu.Lock()
-			batch = append(batch, logEntry)
-			if len(batch) >= lp.batchLinesSize {
-				lp.flushBatch(batch)
-				batch = nil
-			}
-			mu.Unlock()
-
-		case <-flushSignal:
-			mu.Lock()
-			if len(batch) > 0 {
-				lp.flushBatch(batch)
-				batch = nil
-			}
-			mu.Unlock()
 
 		case <-ctx.Done():
-			mu.Lock()
-			defer mu.Unlock()
-
-			drainCtx, cancelDrain := context.WithTimeout(context.Background(), 2*time.Second)
-			defer cancelDrain()
-
-			for {
-				select {
-				case msg := <-lp.consumer.Messages():
-					var rawEntry entity.RawEntry
-					err := json.Unmarshal([]byte(msg), &rawEntry)
-					if err != nil {
-						return fmt.Errorf("processMessage failed during unmarshal: %v", err)
-					}
-
-					logEntry, err := lp.processMessage(rawEntry)
-					if err == nil {
-						batch = append(batch, logEntry)
-					}
-				case <-drainCtx.Done():
-					lp.flushBatch(batch)
-					return nil
-				default:
-					lp.flushBatch(batch)
-					return nil
-				}
-			}
+			return ctx.Err()
 		}
 	}
 }
 
-func (lp *LogProcessor) processMessage(rawEntry entity.RawEntry) (entity.LogEntry, error) {
-	msg := rawEntry.Raw
-
-	parser, err := lp.logParserFactory.GetParser(msg)
-	if err != nil {
-		return entity.LogEntry{}, fmt.Errorf("get parser failed: %v", err)
+func (lp *LogProcessor) processSingleMessage(msg string) (entity.LogEntry, error) {
+	var rawEntry entity.RawEntry
+	if err := json.Unmarshal([]byte(msg), &rawEntry); err != nil {
+		return entity.LogEntry{}, fmt.Errorf("unmarshal error: %w", err)
 	}
 
-	logEntry, err := parser.Parse(msg)
-	logEntry.StartAt = rawEntry.StartAt
-
+	parser, err := lp.logParserFactory.GetParser(rawEntry.Raw)
 	if err != nil {
-		return entity.LogEntry{}, fmt.Errorf("parse failed: %v", err)
+		return entity.LogEntry{}, fmt.Errorf("parser error: %w", err)
 	}
 
-	var data []byte
-	if parser.PreservesRaw() {
-		data = []byte(msg)
-	} else {
-		data, err = json.Marshal(logEntry)
-		if err != nil {
-			return entity.LogEntry{}, fmt.Errorf("marshal failed: %v", err)
-		}
+	logEntry, err := parser.Parse(rawEntry.Raw)
+	if err != nil {
+		return entity.LogEntry{}, fmt.Errorf("parse error: %w", err)
 	}
 
-	err = lp.producer.Send(string(data))
-	if err != nil {
-		return entity.LogEntry{}, fmt.Errorf("send failed: %v", err)
-	} else {
-		metrics.LogProcessingBySeconds.Inc()
+	if err := lp.sendProcessedMessage(rawEntry.Raw, logEntry, parser.PreservesRaw()); err != nil {
+		return entity.LogEntry{}, fmt.Errorf("send error: %w", err)
 	}
 
 	return logEntry, nil
 }
 
-func (lp *LogProcessor) flushBatch(batch []entity.LogEntry) {
+func (lp *LogProcessor) sendProcessedMessage(rawMsg string, entry entity.LogEntry, preserveRaw bool) error {
+    var data []byte
+    if preserveRaw {
+        data = []byte(rawMsg)
+    } else {
+        var err error
+        if data, err = json.Marshal(entry); err != nil {
+            return err
+        }
+    }
+    return lp.producer.Send(string(data))
+}
+
+func (lp *LogProcessor) safeFlush(batch []entity.LogEntry) {
 	if len(batch) == 0 {
 		return
 	}
 
-	const maxRetries = 3
-	for i := range maxRetries {
-		if err := lp.transformRepository.Transform(batch); err == nil {
-			muCounter.Lock()
-			counter.processed += int64(len(batch))
-			muCounter.Unlock()
-			return
+	go func(b []entity.LogEntry) {
+		const maxRetries = 5
+		for i := 0; i < maxRetries; i++ {
+			if err := lp.transformRepository.Transform(b); err == nil {
+				metrics.ProcessedMessages.Add(float64(len(b)))
+				return
+			}
+			time.Sleep(time.Duration(i*i) * 100 * time.Millisecond)
 		}
-		time.Sleep(time.Duration(i*100) * time.Millisecond)
-	}
+		log.Printf("Failed to persist batch of %d messages after %d retries", len(b), maxRetries)
+	}(slices.Clone(batch))
+}
 
-	log.Printf("Persistent fail on insert batch of %d lines", len(batch))
+func (lp *LogProcessor) Close() {
+	lp.wg.Wait()
 }

@@ -10,17 +10,18 @@ type RawEntry struct {
 }
 
 type LogEntry struct {
-	StartAt    time.Time
-	Timestamp  time.Time
-	Level      string
-	Service    string
-	Message    string
-	IPAddress  string
-	Method     string
-	Path       string
-	StatusCode int
-	UserAgent  string
-	Metadata   map[string]any
+    StartAt    time.Time
+    Raw        string
+    Timestamp  time.Time
+    Level      string
+    Service    string
+    Message    string
+    IPAddress  string
+    Method     string
+    Path       string
+    StatusCode int
+    UserAgent  string
+    Metadata   map[string]any
 }
 
 func (ly *LogEntry) CalculateTotalProcessedTimeByMilliseconds() int64 {

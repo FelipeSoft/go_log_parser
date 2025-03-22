@@ -12,7 +12,7 @@ type SimpleAlertParser struct {
 	regex *regexp.Regexp
 }
 
-func NewSimpleAlertParser(regex *regexp.Regexp) *SimpleAlertParser {
+func NewSimpleAlertParser(regex *regexp.Regexp) entity.LogParser {
 	return &SimpleAlertParser{regex: regex}
 }
 

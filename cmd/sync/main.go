@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
 	"os"
 	"regexp"
 	"strconv"
@@ -16,6 +17,8 @@ import (
 	"github.com/etl_app_transform_service/internal/infrastructure/memory"
 	"github.com/etl_app_transform_service/internal/infrastructure/repository/mongodb"
 	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	_ "github.com/etl_app_transform_service/internal/infrastructure/metrics"
 )
 
 func main() {
@@ -75,6 +78,9 @@ func main() {
 	}
 
 	filesize := fileInfo.Size()
+
+	metricsHost := os.Getenv("METRICS_HOST_LOG_PROCESSOR")
+	initMetricsServer(metricsHost)
 
 	wg.Add(1)
 	go func() {
@@ -136,3 +142,14 @@ func main() {
 	processedLogsProducer.Close()
 	processedLogsConsumer.Close()
 }
+
+func initMetricsServer(host string) {
+	http.Handle("/metrics", promhttp.Handler())
+	go func() {
+		if err := http.ListenAndServe(host, nil); err != nil {
+			log.Fatalf("Metrics server failed: %v", err)
+		}
+	}()
+	log.Printf("Metrics server listening on %s", host)
+}
+

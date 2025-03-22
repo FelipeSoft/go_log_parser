@@ -12,7 +12,7 @@ type DeadlockParser struct {
 	pattern *regexp.Regexp
 }
 
-func NewDeadlockParser(re *regexp.Regexp) *DeadlockParser {
+func NewDeadlockParser(re *regexp.Regexp) entity.LogParser {
 	return &DeadlockParser{pattern: re}
 }
 
